@@ -105,7 +105,7 @@ public class ChatRoom implements Listener {
     public ChatRoom(ConfigurationSection data) {
         this.name = data.getString("name");
         this.owner = data.getOfflinePlayer("owner");
-        this.members = (LinkedList<OfflinePlayer>) data.getList("members");
+        this.members = new LinkedList<OfflinePlayer>((List<OfflinePlayer>) data.getList("members"));
         this.password = data.getString("password");
         Main.plugin.getServer().getPluginManager().registerEvents(this, Main.plugin);
         rooms.add(this);
@@ -120,6 +120,9 @@ public class ChatRoom implements Listener {
 
     public void sendMessage(String message) {
         Main.plugin.getLogger().info("[" + name + "] " + message);
+        if (owner.isOnline()) {
+            owner.getPlayer().sendMessage(ChatColor.AQUA + "[" + name + "] " + message);
+        }
         for (OfflinePlayer p : members) {
             if (p.isOnline()) {
                 p.getPlayer().sendMessage(ChatColor.AQUA + "[" + name + "] " + message);
@@ -134,6 +137,9 @@ public class ChatRoom implements Listener {
 
     public void sendChat(Player sender, String message) {
         Main.plugin.getLogger().info("[" + name + "] " + sender.getName() + " >> " + message);
+        if (owner.isOnline()) {
+            owner.getPlayer().sendMessage(ChatColor.AQUA + "[" + name + "] " + sender.getName() + " >> " + message);
+        }
         for (OfflinePlayer p : members) {
             if (p.isOnline()) {
                 p.getPlayer().sendMessage(ChatColor.AQUA + "[" + name + "] " + sender.getName() + " >> " + message);
@@ -178,9 +184,9 @@ public class ChatRoom implements Listener {
                 room.removeFromChannel(p);
             }
         }
-        if(!members.contains(p)) {
+        if (!(members.contains(p) || owner.equals(p))) {
             if (p.hasPermission("chatrooms.admin")) {
-                Util.sendMessage(p, "You are spying on " + getName() + ".");
+                Util.sendMessage(p, "You are spying on " + getName() + ". Use /cr global to reset the rooms you're spying on.");
                 spies.add(p);
                 return true;
             } else {
@@ -244,11 +250,11 @@ public class ChatRoom implements Listener {
 
     public String[] getInfo() {
         String[] result = new String[3];
-        result[0] = ChatColor.AQUA + "Name: " + ChatColor.DARK_BLUE + name;
-        result[1] = ChatColor.AQUA + "Owner: " + ChatColor.DARK_BLUE + owner.getName();
-        result[2] = ChatColor.AQUA + "Members: " + ChatColor.DARK_BLUE + owner.getName();
+        result[0] = ChatColor.AQUA + "Name: " + name;
+        result[1] = ChatColor.AQUA + "Owner: " + ChatColor.YELLOW + owner.getName();
+        result[2] = ChatColor.AQUA + "Members: " + ChatColor.YELLOW + owner.getName();
         for (OfflinePlayer member : members) {
-            result[2] += ", " + member.getName();
+            result[2] += ChatColor.AQUA + ", " + ChatColor.YELLOW + member.getName();
         }
         return result;
     }

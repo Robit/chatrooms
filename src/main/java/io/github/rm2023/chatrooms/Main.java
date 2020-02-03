@@ -18,6 +18,7 @@ import io.github.jorelali.commandapi.api.CommandAPI;
 import io.github.jorelali.commandapi.api.CommandPermission;
 import io.github.jorelali.commandapi.api.arguments.Argument;
 import io.github.jorelali.commandapi.api.arguments.DynamicSuggestedStringArgument;
+import io.github.jorelali.commandapi.api.arguments.GreedyStringArgument;
 import io.github.jorelali.commandapi.api.arguments.LiteralArgument;
 import io.github.jorelali.commandapi.api.arguments.PlayerArgument;
 import io.github.jorelali.commandapi.api.arguments.StringArgument;
@@ -31,8 +32,6 @@ public class Main extends JavaPlugin {
     @Override
     public void onLoad() {
         plugin = this;
-        // Initialize ChatRooms from database
-        ChatRoom.initialize();
         // Register permissions
         getServer().getPluginManager().addPermission(new Permission("chatrooms.user", "Allows users to join, leave, and chat in chatrooms"));
         getServer().getPluginManager().addPermission(new Permission("chatrooms.manage", " A manager can create, delete, and manage their own chatroom"));
@@ -80,7 +79,7 @@ public class Main extends JavaPlugin {
                 Util.sendError(sender, "This command can only be executed by a player!");
                 return;
             }
-            if(sender.hasPermission(new Permission("chatrooms.unlimited")) || ChatRoom.getRooms((Player) sender).size() < MAX_CHATROOMS) {
+            if ((!sender.hasPermission(new Permission("chatrooms.unlimited"))) && ChatRoom.getRooms((Player) sender).size() >= MAX_CHATROOMS) {
                 Util.sendError(sender, "You can only create up to " + MAX_CHATROOMS + " rooms!");
                 return;
             }
@@ -143,7 +142,7 @@ public class Main extends JavaPlugin {
                 return;
             }
             if (sender.hasPermission("chatrooms.admin") || toChange.getOwner().equals((Player) sender)) {
-                if (toInvite.hasPermission("chatrooms.user")) {
+                if (!toInvite.hasPermission("chatrooms.user")) {
                     Util.sendError(sender, "This player doesn't have permission to join rooms!");
                     return;
                 }
@@ -154,27 +153,6 @@ public class Main extends JavaPlugin {
                 return;
             }
             Util.sendError(sender, "Only the owner of the room can invite players!");
-        });
-
-        arguments = new LinkedHashMap<String, Argument>();
-        arguments.put("literal", new LiteralArgument("kick").withPermission(CommandPermission.fromString("chatrooms.manage")));
-        arguments.put("name", chatRoomName);
-        arguments.put("player", new PlayerArgument());
-        CommandAPI.getInstance().register("chatroom", CommandPermission.fromString("chatrooms.user"), new String[] { "cr" }, arguments, (sender, args) -> {
-            String name = (String) args[0];
-            Player toKick = (Player) args[1];
-            ChatRoom toChange = ChatRoom.getRoom(name);
-            if (toChange == null) {
-                Util.sendError(sender, "This room doesn't exist!");
-                return;
-            }
-            if (sender.hasPermission("chatrooms.admin") || toChange.getOwner().equals((Player) sender)) {
-                if (!toChange.removePlayer(toKick)) {
-                    Util.sendError(sender, "An error occured!");
-                }
-                return;
-            }
-            Util.sendError(sender, "Only the owner of the room can kick players!");
         });
 
         arguments = new LinkedHashMap<String, Argument>();
@@ -262,6 +240,10 @@ public class Main extends JavaPlugin {
                 Util.sendError(sender, "This room doesn't exist!");
                 return;
             }
+            if (toChange.getOwner().equals((Player) sender)) {
+                Util.sendError(sender, "You can't leave a room you own! Try /cr delete instead.");
+                return;
+            }
             if (!toChange.removePlayer((Player) sender)) {
                 Util.sendError(sender, "An error occured!");
                 return;
@@ -282,10 +264,30 @@ public class Main extends JavaPlugin {
                 Util.sendError(sender, "This room doesn't exist!");
                 return;
             }
-            if (!toChange.addToChannel((Player) sender)) {
-                Util.sendError(sender, "An error occured!");
+            toChange.addToChannel((Player) sender);
+        });
+
+        arguments = new LinkedHashMap<String, Argument>();
+        arguments.put("literal", new LiteralArgument("send"));
+        arguments.put("name", chatRoomName);
+        arguments.put("message", new GreedyStringArgument());
+        CommandAPI.getInstance().register("chatroom", CommandPermission.fromString("chatrooms.user"), new String[] { "cr" }, arguments, (sender, args) -> {
+            if (!(sender instanceof Player)) {
+                Util.sendError(sender, "This command can only be executed by a player!");
                 return;
             }
+            String name = (String) args[0];
+            String message = (String) args[1];
+            ChatRoom toChange = ChatRoom.getRoom(name);
+            if (toChange == null) {
+                Util.sendError(sender, "This room doesn't exist!");
+                return;
+            }
+            if (!(ChatRoom.getRooms((Player) sender).contains(toChange) || sender.hasPermission("chatrooms.admin"))) {
+                Util.sendError(sender, "You aren't a member of this room!");
+                return;
+            }
+            toChange.sendChat((Player) sender, message);
         });
 
         arguments = new LinkedHashMap<String, Argument>();
@@ -302,10 +304,7 @@ public class Main extends JavaPlugin {
                 Util.sendError(sender, "This room doesn't exist!");
                 return;
             }
-            if (!toChange.addToChannel((Player) sender)) {
-                Util.sendError(sender, "An error occured!");
-                return;
-            }
+            toChange.addToChannel((Player) sender);
         });
 
         arguments = new LinkedHashMap<String, Argument>();
@@ -348,19 +347,26 @@ public class Main extends JavaPlugin {
 
         arguments = new LinkedHashMap<String, Argument>();
         arguments.put("literal", new LiteralArgument("list"));
-        arguments.put("player", new PlayerArgument().withPermission(CommandPermission.fromString("chatrooms.admin")));
         CommandAPI.getInstance().register("chatroom", CommandPermission.fromString("chatrooms.user"), new String[] { "cr" }, arguments, (sender, args) -> {
-            Player p = null;
-            if (sender instanceof Player) {
-                p = (Player) sender;
-            }
-            if (args.length > 0) {
-                p = (Player) args[0];
-            }
-            if (p == null) {
+            if (!(sender instanceof Player)) {
                 Util.sendError(sender, "This command must be executed as a player!");
                 return;
             }
+            List<ChatRoom> rooms = ChatRoom.getRooms((Player) sender);
+            if (rooms.isEmpty()) {
+                Util.sendMessage(sender, "This user is not part of any chatrooms.");
+            }
+            for (ChatRoom room : rooms) {
+                sender.sendMessage(room.getInfo());
+                sender.sendMessage("");
+            }
+        });
+
+        arguments = new LinkedHashMap<String, Argument>();
+        arguments.put("literal", new LiteralArgument("check").withPermission(CommandPermission.fromString("chatrooms.admin")));
+        arguments.put("player", new PlayerArgument());
+        CommandAPI.getInstance().register("chatroom", CommandPermission.fromString("chatrooms.user"), new String[] { "cr" }, arguments, (sender, args) -> {
+            Player p = (Player) args[0];
             List<ChatRoom> rooms = ChatRoom.getRooms(p);
             if (rooms.isEmpty()) {
                 Util.sendMessage(sender, "This user is not part of any chatrooms.");
@@ -373,6 +379,7 @@ public class Main extends JavaPlugin {
     }
 
     public void onEnable() {
-
+        // Initialize ChatRooms from database
+        ChatRoom.initialize();
     }
 }
