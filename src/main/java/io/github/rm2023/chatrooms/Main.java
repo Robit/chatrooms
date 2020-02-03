@@ -8,7 +8,6 @@ public class Main extends JavaPlugin {
 
     @Override
     public void onLoad() {
-        // Construct data backend
         plugin = this;
 
     }
