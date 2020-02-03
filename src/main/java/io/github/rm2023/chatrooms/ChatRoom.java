@@ -31,6 +31,7 @@ public class ChatRoom implements Listener {
     protected LinkedList<OfflinePlayer> members = new LinkedList<OfflinePlayer>();
     protected LinkedList<Player> invited = new LinkedList<Player>();
     protected LinkedList<Player> inChannel = new LinkedList<Player>();
+    protected LinkedList<Player> spies = new LinkedList<Player>();
 
     public static void initialize() {
         dataFile = new File(Main.plugin.getDataFolder(), "data.yml");
@@ -43,7 +44,7 @@ public class ChatRoom implements Listener {
         try {
             data.load(dataFile);
         } catch (IOException | InvalidConfigurationException e) {
-            Main.plugin.getLogger().log(Level.SEVERE, "Error loading RankToken information!");
+            Main.plugin.getLogger().log(Level.SEVERE, "Error loading ChatRoom information!");
             e.printStackTrace();
             return;
         }
@@ -54,11 +55,9 @@ public class ChatRoom implements Listener {
     }
 
     public static void save() {
+        data = new YamlConfiguration();
         for (ChatRoom room : rooms) {
-            ConfigurationSection roomData = data.getConfigurationSection(room.getName());
-            if (roomData == null) {
-                roomData = data.createSection(room.getName());
-            }
+            ConfigurationSection roomData = data.createSection(room.getName());
             roomData.set("name", room.name);
             roomData.set("password", room.password);
             roomData.set("owner", room.owner);
@@ -119,17 +118,30 @@ public class ChatRoom implements Listener {
         save();
     }
 
-    public void sendChat(String message) {
+    public void sendMessage(String message) {
+        Main.plugin.getLogger().info("[" + name + "] " + message);
         for (OfflinePlayer p : members) {
             if (p.isOnline()) {
-                p.getPlayer().sendMessage(ChatColor.AQUA + message);
-                Main.plugin.getLogger().info("[Chatroom " + name + "] " + message);
+                p.getPlayer().sendMessage(ChatColor.AQUA + "[" + name + "] " + message);
             }
         }
-        for (Player p : inChannel) {
-            if (p.isOnline() && !members.contains(p)) {
-                p.sendMessage(ChatColor.AQUA + message);
-                Main.plugin.getLogger().info("[Chatroom " + name + "] " + message);
+        for (OfflinePlayer p : spies) {
+            if (p.isOnline()) {
+                p.getPlayer().sendMessage(ChatColor.AQUA + "[" + name + "] " + message);
+            }
+        }
+    }
+
+    public void sendChat(Player sender, String message) {
+        Main.plugin.getLogger().info("[" + name + "] " + sender.getName() + " >> " + message);
+        for (OfflinePlayer p : members) {
+            if (p.isOnline()) {
+                p.getPlayer().sendMessage(ChatColor.AQUA + "[" + name + "] " + sender.getName() + " >> " + message);
+            }
+        }
+        for (OfflinePlayer p : spies) {
+            if (p.isOnline()) {
+                p.getPlayer().sendMessage(ChatColor.AQUA + "[" + name + "] " + sender.getName() + " >> " + message);
             }
         }
     }
@@ -150,7 +162,7 @@ public class ChatRoom implements Listener {
         }
         if (members.add(p)) {
             Util.sendMessage(p, "You are now a member of chatroom " + name + ".");
-            sendChat(p.getName() + " has entered the chatroom.");
+            sendMessage(p.getName() + " has entered the chatroom.");
             save();
             return true;
         }
@@ -162,26 +174,38 @@ public class ChatRoom implements Listener {
             return false;
         }
         for(ChatRoom room : rooms) {
-            room.removeFromChannel(p);
+            if (room.inChannel.contains(p)) {
+                room.removeFromChannel(p);
+            }
+        }
+        if(!members.contains(p)) {
+            if (p.hasPermission("chatrooms.admin")) {
+                Util.sendMessage(p, "You are spying on " + getName() + ".");
+                spies.add(p);
+                return true;
+            } else {
+                Util.sendError(p, "You aren't a member of this room!");
+                return false;
+            }
         }
         Util.sendMessage(p, "You are now in channel " + getName() + ".");
-        return inChannel.add(p);
+        inChannel.add(p);
+        return true;
     }
 
     public boolean removeFromChannel(OfflinePlayer p) {
-        if (p.isOnline()) {
+        if (inChannel.remove(p) || spies.remove(p)) {
             Util.sendMessage(p.getPlayer(), "You are no longer in channel " + getName() + ".");
+            return true;
         }
-        return inChannel.remove(p);
+        return false;
     }
 
     public boolean removePlayer(OfflinePlayer p) {
         if (members.remove(p)) {
             removeFromChannel(p);
-            if (p.isOnline()) {
-                Util.sendMessage(p.getPlayer(), "You are no longer a member of chatroom " + name + ".");
-            }
-            sendChat(p.getName() + " has left the chatroom.");
+            Util.sendMessage(p.getPlayer(), "You are no longer a member of chatroom " + name + ".");
+            sendMessage(p.getName() + " has left the chatroom.");
             save();
             return true;
         }
@@ -214,6 +238,10 @@ public class ChatRoom implements Listener {
         return owner;
     }
 
+    public boolean isInvited(OfflinePlayer p) {
+        return invited.contains(p);
+    }
+
     public String[] getInfo() {
         String[] result = new String[3];
         result[0] = ChatColor.AQUA + "Name: " + ChatColor.DARK_BLUE + name;
@@ -229,12 +257,13 @@ public class ChatRoom implements Listener {
     public void onPlayerChat(AsyncPlayerChatEvent event) {
         if (inChannel.contains(event.getPlayer())) {
             event.setCancelled(true);
-            sendChat(event.getMessage());
+            sendChat(event.getPlayer(), event.getMessage());
         }
     }
 
     @EventHandler
     public void onPlayerLogout(PlayerQuitEvent event) {
         inChannel.remove(event.getPlayer());
+        spies.remove(event.getPlayer());
     }
 }
