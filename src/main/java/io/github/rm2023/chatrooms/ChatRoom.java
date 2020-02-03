@@ -13,6 +13,7 @@ import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.HandlerList;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.AsyncPlayerChatEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
@@ -107,10 +108,13 @@ public class ChatRoom implements Listener {
         this.owner = data.getOfflinePlayer("owner");
         this.members = (LinkedList<OfflinePlayer>) data.getList("members");
         this.password = data.getString("password");
+        Main.plugin.getServer().getPluginManager().registerEvents(this, Main.plugin);
+        rooms.add(this);
     }
 
     public void remove() {
         rooms.remove(this);
+        HandlerList.unregisterAll(this);
         Main.plugin.getLogger().info("Chatroom " + name + " has been deleted.");
         save();
     }

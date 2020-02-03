@@ -9,6 +9,7 @@ public class Main extends JavaPlugin {
     @Override
     public void onLoad() {
         plugin = this;
+        ChatRoom.initialize();
 
     }
 
